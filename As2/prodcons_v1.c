@@ -5,14 +5,14 @@
 //Prototypes:
 void *start_producer(void *);
 
-//Globals:
-int shared_index;
+//Shared variables:
 int *shared_buffer;
+int buffer_size, producer_index, consumer_index, number_of_items;
 
 int main (int argc, char* argv[]){
 
 	pthread_t prod_thread;
-	int buffer_size, result;
+	int result, item;
 
 	//Check Cmd-Line Args
 	if(argc != 2){
@@ -25,7 +25,7 @@ int main (int argc, char* argv[]){
 	shared_buffer = malloc(sizeof(int) * buffer_size);
 
 	//Consumer used main thread, Produces uses new thread
-	result = pthread_create(&prod_thread, NULL, start_producer, (void *)&buffer_size);
+	result = pthread_create(&prod_thread, NULL, start_producer, NULL);
 
 	//Check if error on pthread create
 	if (result != 0){
@@ -33,21 +33,23 @@ int main (int argc, char* argv[]){
 		return result;
 	}
 
-	//Initialize the shared index variable
-	shared_index = 0;
-
-	printf("Hello from consumer.\n"); //DEBUG
+	//Initialize the shared variables
+	producer_index = consumer_index = number_of_items = 0;
 
 	//Infinite CONSUMER loop
 	while(1){ 
 
-		if(shared_index > 0){
-			printf("------ Consumer consumed: %d\n", shared_buffer[--shared_index]);
+		if(number_of_items != 0){
+			item = shared_buffer[consumer_index];
+			consumer_index = (consumer_index+1) % buffer_size;
+			number_of_items--;
+
+			//Consume it (print it out)
+			printf("- - - - Consumer consumed: %d\n", item);
+
 		}
 
 	}
-
-	pthread_yield();
 
 	return 0;
 
@@ -56,20 +58,25 @@ int main (int argc, char* argv[]){
 
 void *start_producer(void *args){
 
-	int seq_ints, buffer_size; //sequential integers
-	seq_ints=0;
-
-	buffer_size = *(int*)args;
-
-	printf("Hello from producer.\n"); //DEBUG
+	int seq_ints; //sequential integers
+	seq_ints=-1; //starts the production at 0!
 
 	//Infinite PRODUCER loop
 	while(1){ 
 
-		if( shared_index < buffer_size ){ //Check that the index is less than the buffer size, else dont produce
-			shared_buffer[shared_index++] = seq_ints;
-			printf("Producer produced: %d\n", seq_ints);
+		if(number_of_items != buffer_size){ //Rudamentary
+			//Produce an integer for the buffer
 			seq_ints++;
+			printf("Producer produced: %d\n", seq_ints);
+
+			//Store it
+			shared_buffer[producer_index] = seq_ints;
+
+			//Set index
+			producer_index = (producer_index+1) % buffer_size;
+
+			//Increment item count
+			number_of_items++;
 		}
 
 	}
