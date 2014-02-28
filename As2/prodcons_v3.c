@@ -8,6 +8,9 @@ void *start_producer(void *);
 //Shared variables:
 int *shared_buffer;
 int buffer_size, producer_index, consumer_index, number_of_items;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t prod_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t cons_cond = PTHREAD_COND_INITIALIZER;
 
 int main (int argc, char* argv[]){
 
@@ -39,15 +42,24 @@ int main (int argc, char* argv[]){
 	//Infinite CONSUMER loop
 	while(1){ 
 
-		if(number_of_items != 0){
-			item = shared_buffer[consumer_index];
-			consumer_index = (consumer_index+1) % buffer_size;
-			number_of_items--;
+		pthread_mutex_lock(&mutex);
 
-			//Consume it (print it out)
-			printf("- - - - Consumer consumed: %d\n", item);
-
+		if(number_of_items == 0){ //if no more items left
+			pthread_cond_wait(&cons_cond, &mutex); //sleep this
 		}
+
+		item = shared_buffer[consumer_index];
+		consumer_index = (consumer_index+1) % buffer_size;
+		number_of_items--;
+
+		//Consume it (print it out)
+		printf("- - - - Consumer consumed: %d\n", item);
+
+		if(number_of_items == buffer_size-1){ // if there is room in the buffer
+			pthread_cond_signal(&prod_cond); //wakeup producer
+		}
+
+		pthread_mutex_unlock(&mutex);
 
 	}
 
@@ -64,20 +76,31 @@ void *start_producer(void *args){
 	//Infinite PRODUCER loop
 	while(1){ 
 
-		if(number_of_items != buffer_size){ //Rudamentary
-			//Produce an integer for the buffer
-			seq_ints++;
-			printf("Producer produced: %d\n", seq_ints);
+		pthread_mutex_lock(&mutex);
 
-			//Store it
-			shared_buffer[producer_index] = seq_ints;
-
-			//Set index
-			producer_index = (producer_index+1) % buffer_size;
-
-			//Increment item count
-			number_of_items++;
+		if(number_of_items == buffer_size){ //if buffer is full
+			pthread_cond_wait(&prod_cond, &mutex); //sleep this
 		}
+
+		//Produce an integer for the buffer
+		seq_ints++;
+		printf("Producer produced: %d\n", seq_ints);
+
+		//Store it
+		shared_buffer[producer_index] = seq_ints;
+
+		//Set index
+		producer_index = (producer_index+1) % buffer_size;
+
+		//Increment item count
+		number_of_items++;
+
+		if(number_of_items == 1){ //if we have an item to consume
+			pthread_cond_signal(&cons_cond); //wakeup consumer
+		}
+
+		pthread_mutex_unlock(&mutex);
+		
 
 	}
 

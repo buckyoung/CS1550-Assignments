@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+#define PROD_SIGNAL SIGUSR1
+#define CONS_SIGNAL SIGUSR2
+
 //Prototypes:
 void *start_producer(void *);
 void my_sleep(int);
@@ -104,9 +107,9 @@ void *start_producer(void *args){
 //Custom sleep given code
 void my_sleep(int who) {
     int sig;
-    sigemptyset(&set);
-    sigaddset(&set, who);
-    sigwait(&set, &sig);
+    sigemptyset(&set); //SET ? 
+    sigaddset(&set, who); //WHO ?  
+    sigwait(&set, &sig); //SIG ? 
 }
 
 //Custom wakeup
