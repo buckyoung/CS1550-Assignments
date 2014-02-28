@@ -1,3 +1,6 @@
+//Pthread Mutex and Condition Version
+//bcy3 -- CS1550, Spring 2014
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>

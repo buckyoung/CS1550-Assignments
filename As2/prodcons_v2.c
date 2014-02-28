@@ -1,8 +1,19 @@
+//Custom Semaphore with Custom Sleep/Wake and Busy Waiting Version
+//bcy3 -- CS1550, Spring 2014
+
+//NOTE: Initial sizes of semaphores:
+//	EMPTY[buffersize] .. FULL[0] .. MUTEX[1]
+//NOTE: number_of_items is not needed in this version
+
+//Multi-core fix (2 lines)
+#define _GNU_SOURCE
+#define <sched.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 
-#define PROD_SIGNAL SIGUSR1
+#define PROD_SIGNAL SIGUSR1 //?? THOT DOES NOT RECOGNIZE THESE ??
 #define CONS_SIGNAL SIGUSR2
 
 
@@ -13,12 +24,13 @@ void my_wakeup(int);
 
 //Shared variables:
 int *shared_buffer;
-int buffer_size, producer_index, consumer_index, number_of_items;
+int buffer_size, producer_index, consumer_index;
 
 int main (int argc, char* argv[]){
 
 	pthread_t prod_thread, cons_thread;
 	int result, item;
+	cpu_set_t cpuset;//Multi-core fix
 
 	//Custom Signals Given Code
 	sigset_t set;
@@ -29,6 +41,16 @@ int main (int argc, char* argv[]){
 		printf("Usage: ./prodcons_v# [buffer size]\n");
 		return -1;
 	}
+
+	//Multi-core fix (2 lines)
+     CPU_ZERO(&cpuset);
+     CPU_SET(0, &cpuset);
+ 
+     if(sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) != 0)
+     {
+           perror("Setting affinity failed\n");
+           exit(-1);
+     }
 
 	//Init consumer thread id
 	cons_thread = pthread_self();
@@ -56,20 +78,28 @@ int main (int argc, char* argv[]){
 	}
 
 	//Initialize the shared variables
-	producer_index = consumer_index = number_of_items = 0;
+	producer_index = consumer_index = 0;
 
 	//Infinite CONSUMER loop
 	while(1){ 
 
-		if(number_of_items != 0){
-			item = shared_buffer[consumer_index];
-			consumer_index = (consumer_index+1) % buffer_size;
-			number_of_items--;
 
-			//Consume it (print it out)
-			printf("- - - - Consumer consumed: %d\n", item);
+		//CRIT
+		FULL.down(); //Psuedo-code
+		MUTEX.down(); //Psuedo-code
 
-		}
+		//Get item
+		item = shared_buffer[consumer_index];
+		//Set index
+		consumer_index = (consumer_index+1) % buffer_size;
+
+		MUTEX.up(); //Psuedo-code
+		EMPTY.up(); //Psuedo-code
+		//END-CRIT
+
+
+		//Consume it (print it out)
+		printf("- - - - Consumer consumed: %d\n", item);
 
 	}
 
@@ -85,21 +115,23 @@ void *start_producer(void *args){
 
 	//Infinite PRODUCER loop
 	while(1){ 
+		//Produce an integer for the buffer
+		seq_ints++;
+		printf("Producer produced: %d\n", seq_ints);
 
-		if(number_of_items != buffer_size){ //Rudamentary
-			//Produce an integer for the buffer
-			seq_ints++;
-			printf("Producer produced: %d\n", seq_ints);
+		//CRIT
+		EMPTY.down(); //Psuedo-code
+		MUTEX.down(); //Psuedo-code
 
-			//Store it
-			shared_buffer[producer_index] = seq_ints;
+		//Store it
+		shared_buffer[producer_index] = seq_ints;
+		//Set index
+		producer_index = (producer_index+1) % buffer_size;
 
-			//Set index
-			producer_index = (producer_index+1) % buffer_size;
+		MUTEX.up(); //Psuedo-code
+		FULL.up(); //Psuedo-code
+		//END-CRIT
 
-			//Increment item count
-			number_of_items++;
-		}
 
 	}
 
@@ -108,14 +140,14 @@ void *start_producer(void *args){
 //Custom sleep given code
 void my_sleep(int who) {
     int sig;
-    sigemptyset(&set); //SET ? 
-    sigaddset(&set, who); //WHO ?  
-    sigwait(&set, &sig); //SIG ? 
+    sigemptyset(&set); //?? SET ??
+    sigaddset(&set, who); //?? WHO ??  
+    sigwait(&set, &sig); //?? SIG ?? 
 }
 
 //Custom wakeup
 void my_wakeup(int who){
-	pthread_kill(pthread_t thread, int signal);
+	pthread_kill(pthread_t thread, int signal); //?? What signal ??
 }
 
 
