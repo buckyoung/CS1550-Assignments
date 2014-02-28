@@ -5,20 +5,19 @@
 //	EMPTY[buffersize] .. FULL[0] .. MUTEX[1]
 //NOTE: number_of_items is not needed in this version
 
-//Multi-core fix (2 lines)
-#define _GNU_SOURCE
-#define <sched.h>
+//Multi-core fix
 
+#define THOT //My local machine does not recognize cpu_set_t, so I leave THOT undefined when compiling locally.
+#define _GNU_SOURCE
+
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <signal.h>
 
-#define PROD_SIGNAL SIGUSR1 //?? THOT DOES NOT RECOGNIZE THESE ??
+#define PROD_SIGNAL SIGUSR1 
 #define CONS_SIGNAL SIGUSR2
-
-#define THOT 1
-
 
 //Prototypes:
 void *start_producer(void *);
@@ -28,14 +27,17 @@ void my_wakeup(int);
 //Shared variables:
 int *shared_buffer;
 int buffer_size, producer_index, consumer_index;
+pthread_t prod_thread, cons_thread;
 
 int main (int argc, char* argv[]){
 
-	pthread_t prod_thread, cons_thread;
+
 	int result, item;
-	if(THOT){
-		cpu_set_t cpuset;//Multi-core fix
-	}
+
+	//Multi-core fix
+	#ifdef THOT
+		cpu_set_t cpuset;
+	#endif
 
 	//Custom Signals Given Code
 	sigset_t set;
@@ -47,17 +49,16 @@ int main (int argc, char* argv[]){
 		return -1;
 	}
 
-	//Multi-core fix (2 lines)
-	if(THOT){
-     	CPU_ZERO(&cpuset);
-     	CPU_SET(0, &cpuset);
- 	}
-
+	//Multi-core fix
+	#ifdef THOT
+     CPU_ZERO(&cpuset);
+     CPU_SET(0, &cpuset);
      if(sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) != 0)
      {
            perror("Setting affinity failed\n");
            exit(-1);
      }
+     #endif
 
 	//Init consumer thread id
 	cons_thread = pthread_self();
@@ -139,22 +140,32 @@ void *start_producer(void *args){
 		FULL.up(); //Psuedo-code
 		//END-CRIT
 
-
 	}
 
 }
 
 //Custom sleep given code
-void my_sleep(int who) {
-    int sig;
-    sigemptyset(&set); //?? SET ??
-    sigaddset(&set, who); //?? WHO ??  
-    sigwait(&set, &sig); //?? SIG ?? 
+void my_sleep(int sig) { 	// PROD_SIGNAL or CONS_SIGNAL
+    int ret; 				// ret = return value for sigwait
+    sigset_t set;			// set = signalset
+
+    sigemptyset(&set);		// initialize set
+    sigaddset(&set, sig); 	// add the SIGNAL to the signal set
+    sigwait(&set, &ret);	// wait until the SIGNAL is sent and return
+
+    if(ret != sig){			// sanity check 
+    	printf("ERROR the return value of sigwait (%d) does not equal the signal sent (%d)", ret, sig);
+    }
 }
 
 //Custom wakeup
-void my_wakeup(int who){
-	pthread_kill(pthread_t thread, int signal); //?? What signal ??
+void my_wakeup(int sig){	// PROD_SIGNAL or CONS_SIGNAL
+
+	if(sig == PROD_SIGNAL) { //If trying to wake up the producer
+		pthread_kill(prod_thread, PROD_SIGNAL); //send producer signal to the producer thread
+	} else if(sig == CONS_SIGNAL) { //If trying to wake up the consumer
+		pthread_kill(cons_thread, CONS_SIGNAL); //send the consumber signal to the consumer thread
+	}
 }
 
 
