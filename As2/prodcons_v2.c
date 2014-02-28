@@ -12,9 +12,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <signal.h>
 
 #define PROD_SIGNAL SIGUSR1 //?? THOT DOES NOT RECOGNIZE THESE ??
 #define CONS_SIGNAL SIGUSR2
+
+#define THOT 1
 
 
 //Prototypes:
@@ -30,7 +33,9 @@ int main (int argc, char* argv[]){
 
 	pthread_t prod_thread, cons_thread;
 	int result, item;
-	cpu_set_t cpuset;//Multi-core fix
+	if(THOT){
+		cpu_set_t cpuset;//Multi-core fix
+	}
 
 	//Custom Signals Given Code
 	sigset_t set;
@@ -43,9 +48,11 @@ int main (int argc, char* argv[]){
 	}
 
 	//Multi-core fix (2 lines)
-     CPU_ZERO(&cpuset);
-     CPU_SET(0, &cpuset);
- 
+	if(THOT){
+     	CPU_ZERO(&cpuset);
+     	CPU_SET(0, &cpuset);
+ 	}
+
      if(sched_setaffinity(getpid(), sizeof(cpu_set_t), &cpuset) != 0)
      {
            perror("Setting affinity failed\n");

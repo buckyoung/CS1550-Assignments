@@ -42,7 +42,7 @@ int main (int argc, char* argv[]){
 	//Infinite CONSUMER loop
 	while(1){ 
 
-		if(number_of_items != 0){ // QUESTION: THIS WILL BUSY WAIT WHEN THE ITEM NUMBER IS 0, IS THIS OKAY?
+		if(number_of_items != 0){ // busy wait if no items to consume
 			item = shared_buffer[consumer_index];
 			consumer_index = (consumer_index+1) % buffer_size;
 			number_of_items--;
@@ -67,7 +67,7 @@ void *start_producer(void *args){
 	//Infinite PRODUCER loop
 	while(1){ 
 
-		if(number_of_items != buffer_size){ // QUESTION: THIS WILL BUSY WAIT WHEN BUFFER IS FULL, IS THIS OK?
+		if(number_of_items != buffer_size){ // busy wait if buffer is full
 			//Produce an integer for the buffer
 			seq_ints++;
 			printf("Producer produced: %d\n", seq_ints);
