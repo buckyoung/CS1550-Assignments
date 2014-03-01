@@ -262,7 +262,6 @@ void enter_region(pthread_t process){
 void leave_region(pthread_t process){
 	if (process == prod_thread){
 		prod_interested = 0; //false
-
 	} else if (process == cons_thread){
 		cons_interested = 0; //false
 
