@@ -98,7 +98,7 @@ int main (int argc, char* argv[]){
     full = malloc(sizeof(Semaphore));
     mutex = malloc(sizeof(Semaphore));
      empty->val = buffer_size;
-     full->val = -buffer_size;
+     full->val = 0;
      mutex->val = 1;
 
 	//Consumer used main thread, Produces uses new thread
