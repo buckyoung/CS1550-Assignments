@@ -18,6 +18,7 @@
 
 #define PROD_SIGNAL SIGUSR1 
 #define CONS_SIGNAL SIGUSR2
+#define DEBUG 1 //true
 
 //Structs:
 typedef struct {
@@ -33,6 +34,7 @@ void down(Semaphore);
 void up(Semaphore);
 void enter_region(pthread_t);
 void leave_region(pthread_t);
+void debug(char *, char *, int);
 
 //Shared variables:
 int *shared_buffer;
@@ -71,10 +73,9 @@ int main (int argc, char* argv[]){
      }
      #endif
 
-    //Init Semaphores
-     empty.val = buffer_size;
-     full.val = 0;
-     mutex.val = 1;
+     //Init interested
+     prod_interested = 0; //false
+     cons_interested = 0; //false
 
 	//Init consumer thread id
 	cons_thread = pthread_self();
@@ -92,6 +93,11 @@ int main (int argc, char* argv[]){
 	buffer_size = atoi(argv[1]);
 	shared_buffer = malloc(sizeof(int) * buffer_size);
 
+    //Init Semaphores
+     empty.val = buffer_size;
+     full.val = 0;
+     mutex.val = 1;
+
 	//Consumer used main thread, Produces uses new thread
 	result = pthread_create(&prod_thread, NULL, start_producer, NULL);
 
@@ -107,6 +113,7 @@ int main (int argc, char* argv[]){
 	//Infinite CONSUMER loop
 	while(1){ 
 
+		debug("CONS", "Loop begin", 110);
 
 		//CRIT
 		down(full);
@@ -139,6 +146,9 @@ void *start_producer(void *args){
 
 	//Infinite PRODUCER loop
 	while(1){ 
+
+		debug("PROD", "Loop begin", 144);
+
 		//Produce an integer for the buffer
 		seq_ints++;
 		printf("Producer produced: %d\n", seq_ints);
@@ -165,6 +175,8 @@ void my_sleep(int sig) { 	// PROD_SIGNAL or CONS_SIGNAL
     int ret; 				// ret = return value for sigwait
     sigset_t set;			// set = signalset
 
+    debug("SLEEP", "Enter", 172);
+
     sigemptyset(&set);		// initialize set
     sigaddset(&set, sig); 	// add the SIGNAL to the signal set
     sigwait(&set, &ret);	// wait until the SIGNAL is sent and return
@@ -177,9 +189,13 @@ void my_sleep(int sig) { 	// PROD_SIGNAL or CONS_SIGNAL
 //Custom wakeup
 void my_wakeup(int sig){	// PROD_SIGNAL or CONS_SIGNAL
 
+	debug("WAKE", "Enter", 186);
+
 	if(sig == PROD_SIGNAL) { //If trying to wake up the producer
+		debug("WAKE", "wake producer", 191);
 		pthread_kill(prod_thread, PROD_SIGNAL); //send producer signal to the producer thread
 	} else if(sig == CONS_SIGNAL) { //If trying to wake up the consumer
+		debug("WAKE", "wake consumer", 194);
 		pthread_kill(cons_thread, CONS_SIGNAL); //send the consumber signal to the consumer thread
 	}
 }
@@ -190,21 +206,27 @@ void down(Semaphore s){
 	pthread_t thread;
 	thread = pthread_self(); //get the currently running thread
 
+	debug("DOWN", "Enter", 201);
+
 	enter_region(thread);
-	if(thread = prod_thread){ //if producer
+	if(thread == prod_thread){ //if producer
+		debug("DOWN", "semaphore value is going down (producer thread)", 207);
 		s.val -= 1;
 		if(s.val < 0){
 			//Save wake signal then sleep
 			s.sig = PROD_SIGNAL;
 			leave_region(thread);
+			debug("DOWN", "sleep producer", 215);
 			my_sleep(PROD_SIGNAL);
 		}
-	} else if (thread = cons_thread){ //if consumer
+	} else if (thread == cons_thread){ //if consumer
+		debug("DOWN", "semaphore value is going down (consumer thread)", 216);
 		s.val -= 1;
 		if(s.val < 0){
 			//save wake signal then sleep
 			s.sig = CONS_SIGNAL;
 			leave_region(thread);
+			debug("DOWN", "sleep consumer", 224);
 			my_sleep(CONS_SIGNAL);
 		}
 	}
@@ -217,18 +239,24 @@ void up(Semaphore s){
 	pthread_t thread;
 	thread = pthread_self(); //get the currently running thread
 
+	debug("UP", "Enter", 230);
+
 	enter_region(thread);
-	if(thread = prod_thread){ //if producer
+	if(thread == prod_thread){ //if producer
+		debug("UP", "semaphore value is going up (producer thread)", 236);
 		s.val += 1;
 		if(s.val <= 0){
 			//We know wake sig, so wake
-			my_wakeup(PROD_SIGNAL);
+			debug("UP", "wakeup Producer", 244);
+			my_wakeup(CONS_SIGNAL);
 		}
-	} else if (thread = cons_thread){ //if consumer
+	} else if (thread == cons_thread){ //if consumer
+		debug("UP", "semaphore value is going up (consumer thread)", 242);
 		s.val += 1;
 		if(s.val <= 0){
 			//we know wake sig, so wake
-			my_wakeup(CONS_SIGNAL);
+			debug("UP", "wakeup Consumer", 252);
+			my_wakeup(PROD_SIGNAL);
 		}
 	}
 	leave_region(thread);
@@ -239,18 +267,29 @@ void up(Semaphore s){
 //Custom enter
 void enter_region(pthread_t process){
 	pthread_t other;
+
+	debug("E_REG", "Enter", 255);
 	
 	if (process == prod_thread){
+		debug("E_REG", "prod_interested = TRUE, last_request = producer", 260);
 		other = cons_thread;
 		prod_interested = 1; //true
 		last_request = process;
+		if(cons_interested == 1 && last_request == process) //DEBUG
+			debug("E_REG", "about to busy wait the producer", 279);
+		
 		while(cons_interested == 1 && last_request == process){
 			//do nothing, busy wait
 		}
 	} else if (process == cons_thread){
+		debug("E_REG", "cons_interested = TRUE, last_request = consumer", 268);
 		other = prod_thread;
 		cons_interested = 1; //true
 		last_request = process;
+
+		if(prod_interested == 1 && last_request == process) //DEBUG
+			debug("E_REG", "about to busy wait the consumer", 279);
+
 		while(prod_interested == 1 && last_request == process){
 			//do nothing, busy wait
 		}
@@ -261,12 +300,24 @@ void enter_region(pthread_t process){
 
 //Custom leave
 void leave_region(pthread_t process){
+
+	debug("L_REG", "Enter", 279);
+
 	if (process == prod_thread){
+		debug("L_REG", "prod_interested = FALSE", 286);
 		prod_interested = 0; //false
 	} else if (process == cons_thread){
+		debug("L_REG", "cons_interested = FALSE", 289);
 		cons_interested = 0; //false
 
 	}
+}
+
+void debug(char * tag, char * msg, int line){
+
+	if (DEBUG)
+		printf("(debug %d) [%lu] %s: %s\n", line, (unsigned long)pthread_self(), tag, msg);
+
 }
 
 
