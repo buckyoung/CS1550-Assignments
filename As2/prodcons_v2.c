@@ -31,11 +31,13 @@ void my_sleep(int);
 void my_wakeup(int);
 void down(Semaphore);
 void up(Semaphore);
+void enter_region(pthread_t);
+void leave_region(pthread_t);
 
 //Shared variables:
 int *shared_buffer;
-int buffer_size, producer_index, consumer_index;
-pthread_t prod_thread, cons_thread;
+int buffer_size, producer_index, consumer_index, prod_interested, cons_interested;
+pthread_t prod_thread, cons_thread, last_request;
 Semaphore empty, full, mutex;
 
 int main (int argc, char* argv[]){
@@ -188,11 +190,13 @@ void down(Semaphore s){
 	pthread_t thread;
 	thread = pthread_self(); //get the currently running thread
 
+	enter_region(thread);
 	if(thread = prod_thread){ //if producer
 		s.val -= 1;
 		if(s.val < 0){
 			//Save wake signal then sleep
 			s.sig = PROD_SIGNAL;
+			leave_region(thread);
 			my_sleep(PROD_SIGNAL);
 		}
 	} else if (thread = cons_thread){ //if consumer
@@ -200,6 +204,7 @@ void down(Semaphore s){
 		if(s.val < 0){
 			//save wake signal then sleep
 			s.sig = CONS_SIGNAL;
+			leave_region(thread);
 			my_sleep(CONS_SIGNAL);
 		}
 	}
@@ -212,6 +217,7 @@ void up(Semaphore s){
 	pthread_t thread;
 	thread = pthread_self(); //get the currently running thread
 
+	enter_region(thread);
 	if(thread = prod_thread){ //if producer
 		s.val += 1;
 		if(s.val <= 0){
@@ -225,10 +231,43 @@ void up(Semaphore s){
 			my_wakeup(CONS_SIGNAL);
 		}
 	}
+	leave_region(thread);
 
 }
 
 
+//Custom enter
+void enter_region(pthread_t process){
+	pthread_t other;
+	
+	if (process == prod_thread){
+		other = cons_thread;
+		prod_interested = 1; //true
+		last_request = process;
+		while(cons_interested == 1 && last_request == process){
+			//do nothing, busy wait
+		}
+	} else if (process == cons_thread){
+		other = prod_thread;
+		cons_interested = 1; //true
+		last_request = process;
+		while(prod_interested == 1 && last_request == process){
+			//do nothing, busy wait
+		}
+
+	}
+}
+
+//Custom leave
+void leave_region(pthread_t process){
+	if (process == prod_thread){
+		prod_interested = 0; //false
+
+	} else if (process == cons_thread){
+		cons_interested = 0; //false
+
+	}
+}
 
 
 
