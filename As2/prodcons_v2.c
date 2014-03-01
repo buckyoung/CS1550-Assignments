@@ -7,7 +7,7 @@
 
 //Multi-core fix
 
-#define THOT //My local machine does not recognize cpu_set_t, so I leave THOT undefined when compiling locally.
+//#define THOT //My local machine does not recognize cpu_set_t, so I leave THOT undefined when compiling locally.
 #define _GNU_SOURCE
 
 #include <sched.h>
@@ -19,15 +19,24 @@
 #define PROD_SIGNAL SIGUSR1 
 #define CONS_SIGNAL SIGUSR2
 
+//Structs:
+typedef struct {
+	int val; //value of semaphore
+	int sig; //signal which will wake this up
+} Semaphore;
+
 //Prototypes:
 void *start_producer(void *);
 void my_sleep(int);
 void my_wakeup(int);
+void down(Semaphore);
+void up(Semaphore);
 
 //Shared variables:
 int *shared_buffer;
 int buffer_size, producer_index, consumer_index;
 pthread_t prod_thread, cons_thread;
+Semaphore empty, full, mutex;
 
 int main (int argc, char* argv[]){
 
@@ -59,6 +68,11 @@ int main (int argc, char* argv[]){
            exit(-1);
      }
      #endif
+
+    //Init Semaphores
+     empty.val = buffer_size;
+     full.val = 0;
+     mutex.val = 1;
 
 	//Init consumer thread id
 	cons_thread = pthread_self();
@@ -93,16 +107,16 @@ int main (int argc, char* argv[]){
 
 
 		//CRIT
-		FULL.down(); //Psuedo-code
-		MUTEX.down(); //Psuedo-code
+		down(full);
+		down(mutex);
 
 		//Get item
 		item = shared_buffer[consumer_index];
 		//Set index
 		consumer_index = (consumer_index+1) % buffer_size;
 
-		MUTEX.up(); //Psuedo-code
-		EMPTY.up(); //Psuedo-code
+		up(mutex);
+		up(empty);
 		//END-CRIT
 
 
@@ -128,16 +142,16 @@ void *start_producer(void *args){
 		printf("Producer produced: %d\n", seq_ints);
 
 		//CRIT
-		EMPTY.down(); //Psuedo-code
-		MUTEX.down(); //Psuedo-code
+		down(empty);
+		down(mutex);
 
 		//Store it
 		shared_buffer[producer_index] = seq_ints;
 		//Set index
 		producer_index = (producer_index+1) % buffer_size;
 
-		MUTEX.up(); //Psuedo-code
-		FULL.up(); //Psuedo-code
+		up(mutex);
+		up(full);
 		//END-CRIT
 
 	}
@@ -168,6 +182,51 @@ void my_wakeup(int sig){	// PROD_SIGNAL or CONS_SIGNAL
 	}
 }
 
+//Custom down
+void down(Semaphore s){
+	
+	pthread_t thread;
+	thread = pthread_self(); //get the currently running thread
+
+	if(thread = prod_thread){ //if producer
+		s.val -= 1;
+		if(s.val < 0){
+			//Save wake signal then sleep
+			s.sig = PROD_SIGNAL;
+			my_sleep(PROD_SIGNAL);
+		}
+	} else if (thread = cons_thread){ //if consumer
+		s.val -= 1;
+		if(s.val < 0){
+			//save wake signal then sleep
+			s.sig = CONS_SIGNAL;
+			my_sleep(CONS_SIGNAL);
+		}
+	}
+
+}
+
+//Custom up
+void up(Semaphore s){
+	
+	pthread_t thread;
+	thread = pthread_self(); //get the currently running thread
+
+	if(thread = prod_thread){ //if producer
+		s.val += 1;
+		if(s.val <= 0){
+			//We know wake sig, so wake
+			my_wakeup(PROD_SIGNAL);
+		}
+	} else if (thread = cons_thread){ //if consumer
+		s.val += 1;
+		if(s.val <= 0){
+			//we know wake sig, so wake
+			my_wakeup(CONS_SIGNAL);
+		}
+	}
+
+}
 
 
 
