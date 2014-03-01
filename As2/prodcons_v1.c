@@ -4,23 +4,44 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <signal.h>
+
+#define PROD_SIGNAL SIGUSR1 
+#define CONS_SIGNAL SIGUSR2
 
 //Prototypes:
 void *start_producer(void *);
+void my_sleep(int);
+void my_wakeup(int);
 
 //Shared variables:
 int *shared_buffer;
 int buffer_size, producer_index, consumer_index, number_of_items;
+pthread_t prod_thread, cons_thread;
 
 int main (int argc, char* argv[]){
 
-	pthread_t prod_thread;
+	sigset_t set;
+	int s;
+
 	int result, item;
 
 	//Check Cmd-Line Args
 	if(argc != 2){
 		printf("Usage: ./prodcons_v# [buffer size]\n");
 		return -1;
+	}
+
+	//Init consumer thread id
+	cons_thread = pthread_self();
+	//Custom Signal Given Code
+	sigemptyset(&set);
+	sigaddset(&set, PROD_SIGNAL);
+	sigaddset(&set, CONS_SIGNAL);
+	s = pthread_sigmask(SIG_BLOCK, &set, NULL);
+	if (s != 0){
+		printf("Error during signal creation [pthread_sigmask]. Exiting...\n");
+		return s;
 	}
 
 	//Convert Cmd-Line Arg into an integer and malloc space for the buffer based on cmd-line size
@@ -42,15 +63,23 @@ int main (int argc, char* argv[]){
 	//Infinite CONSUMER loop
 	while(1){ 
 
-		if(number_of_items != 0){ // busy wait if no items to consume
-			item = shared_buffer[consumer_index];
-			consumer_index = (consumer_index+1) % buffer_size;
-			number_of_items--;
-
-			//Consume it (print it out)
-			printf("- - - - Consumer consumed: %d\n", item);
-
+		//Check if there is nothing to consume
+		if(number_of_items == 0){
+			my_sleep(CONS_SIGNAL);
 		}
+
+		//given code
+		item = shared_buffer[consumer_index];
+		consumer_index = (consumer_index+1) % buffer_size;
+		number_of_items--;
+
+		//check if we should wake up the producer
+		if(number_of_items == buffer_size-1){
+			my_wakeup(PROD_SIGNAL);
+		}
+
+		//Consume it (print it out)
+		printf("- - - - Consumer consumed: %d\n", item);
 
 	}
 
@@ -58,7 +87,6 @@ int main (int argc, char* argv[]){
 
 
 }
-
 
 void *start_producer(void *args){
 
@@ -68,21 +96,56 @@ void *start_producer(void *args){
 	//Infinite PRODUCER loop
 	while(1){ 
 
-		if(number_of_items != buffer_size){ // busy wait if buffer is full
-			//Produce an integer for the buffer
-			seq_ints++;
-			printf("Producer produced: %d\n", seq_ints);
+		//Produce an integer for the buffer
+		seq_ints++;
+		printf("Producer produced: %d\n", seq_ints);
 
-			//Store it
-			shared_buffer[producer_index] = seq_ints;
-
-			//Set index
-			producer_index = (producer_index+1) % buffer_size;
-
-			//Increment item count
-			number_of_items++;
+		//Check if buffer is full
+		if (number_of_items == buffer_size){
+			my_sleep(PROD_SIGNAL);
 		}
 
+		//Store it
+		shared_buffer[producer_index] = seq_ints;
+
+		//Set index
+		producer_index = (producer_index+1) % buffer_size;
+
+		//Increment item count
+		number_of_items++;
+
+		//Check if we have an item for the consumer after it's been empty
+		if (number_of_items == 1){
+			my_wakeup(CONS_SIGNAL);
+		}
+		
 	}
 
 }
+
+//Custom sleep given code
+void my_sleep(int sig) { 	// PROD_SIGNAL or CONS_SIGNAL
+    int ret; 				// ret = return value for sigwait
+    sigset_t set;			// set = signalset
+
+    sigemptyset(&set);		// initialize set
+    sigaddset(&set, sig); 	// add the SIGNAL to the signal set
+    sigwait(&set, &ret);	// wait until the SIGNAL is sent and return
+
+    if(ret != sig){			// sanity check 
+    	printf("ERROR the return value of sigwait (%d) does not equal the signal sent (%d)", ret, sig);
+    }
+}
+
+//Custom wakeup
+void my_wakeup(int sig){	// PROD_SIGNAL or CONS_SIGNAL
+
+	if(sig == PROD_SIGNAL) { //If trying to wake up the producer
+		pthread_kill(prod_thread, PROD_SIGNAL); //send producer signal to the producer thread
+	} else if(sig == CONS_SIGNAL) { //If trying to wake up the consumer
+		pthread_kill(cons_thread, CONS_SIGNAL); //send the consumber signal to the consumer thread
+	}
+}
+
+
+
