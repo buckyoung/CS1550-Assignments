@@ -18,7 +18,7 @@
 
 #define PROD_SIGNAL SIGUSR1 
 #define CONS_SIGNAL SIGUSR2
-#define DEBUG 1 //true
+#define DEBUG 0
 
 //Structs:
 typedef struct {
@@ -30,8 +30,8 @@ typedef struct {
 void *start_producer(void *);
 void my_sleep(int);
 void my_wakeup(int);
-void down(Semaphore);
-void up(Semaphore);
+void down(Semaphore *);
+void up(Semaphore *);
 void enter_region(pthread_t);
 void leave_region(pthread_t);
 void debug(char *, char *, int);
@@ -40,7 +40,7 @@ void debug(char *, char *, int);
 int *shared_buffer;
 int buffer_size, producer_index, consumer_index, prod_interested, cons_interested;
 pthread_t prod_thread, cons_thread, last_request;
-Semaphore empty, full, mutex;
+Semaphore *empty, *full, *mutex;
 
 int main (int argc, char* argv[]){
 
@@ -94,9 +94,12 @@ int main (int argc, char* argv[]){
 	shared_buffer = malloc(sizeof(int) * buffer_size);
 
     //Init Semaphores
-     empty.val = buffer_size;
-     full.val = 0;
-     mutex.val = 1;
+    empty = malloc(sizeof(Semaphore));
+    full = malloc(sizeof(Semaphore));
+    mutex = malloc(sizeof(Semaphore));
+     empty->val = buffer_size;
+     full->val = -buffer_size;
+     mutex->val = 1;
 
 	//Consumer used main thread, Produces uses new thread
 	result = pthread_create(&prod_thread, NULL, start_producer, NULL);
@@ -154,6 +157,8 @@ void *start_producer(void *args){
 		printf("Producer produced: %d\n", seq_ints);
 
 		//CRIT
+		debug("PROD", "empty val is INT (before down)", empty->val);
+		debug("PROD", "mutex val is INT (before down)", mutex->val);
 		down(empty);
 		down(mutex);
 
@@ -162,8 +167,12 @@ void *start_producer(void *args){
 		//Set index
 		producer_index = (producer_index+1) % buffer_size;
 
+		debug("PROD", "mutex val is INT (after down, before up)", mutex->val);
+		debug("PROD", "full val is INT (after down, before up)", full->val);
 		up(mutex);
 		up(full);
+		debug("PROD", "mutex val is INT (after up)", mutex->val);
+		debug("PROD", "full val is INT (after up)", full->val);
 		//END-CRIT
 
 	}
@@ -201,7 +210,7 @@ void my_wakeup(int sig){	// PROD_SIGNAL or CONS_SIGNAL
 }
 
 //Custom down
-void down(Semaphore s){
+void down(Semaphore *s){
 	
 	pthread_t thread;
 	thread = pthread_self(); //get the currently running thread
@@ -211,20 +220,22 @@ void down(Semaphore s){
 	enter_region(thread);
 	if(thread == prod_thread){ //if producer
 		debug("DOWN", "semaphore value is going down (producer thread)", 207);
-		s.val -= 1;
-		if(s.val < 0){
+		s->val -= 1;
+		debug("DOWN", "semaphore value is INT (check <0 to sleep producer", s->val);
+		if(s->val < 0){
 			//Save wake signal then sleep
-			s.sig = PROD_SIGNAL;
+			s->sig = PROD_SIGNAL;
 			leave_region(thread);
 			debug("DOWN", "sleep producer", 215);
 			my_sleep(PROD_SIGNAL);
 		}
 	} else if (thread == cons_thread){ //if consumer
 		debug("DOWN", "semaphore value is going down (consumer thread)", 216);
-		s.val -= 1;
-		if(s.val < 0){
+		s->val -= 1;
+		debug("DOWN", "semaphore value is INT (check <0 to sleep consumer", s->val);
+		if(s->val < 0){
 			//save wake signal then sleep
-			s.sig = CONS_SIGNAL;
+			s->sig = CONS_SIGNAL;
 			leave_region(thread);
 			debug("DOWN", "sleep consumer", 224);
 			my_sleep(CONS_SIGNAL);
@@ -234,7 +245,7 @@ void down(Semaphore s){
 }
 
 //Custom up
-void up(Semaphore s){
+void up(Semaphore *s){
 	
 	pthread_t thread;
 	thread = pthread_self(); //get the currently running thread
@@ -244,18 +255,20 @@ void up(Semaphore s){
 	enter_region(thread);
 	if(thread == prod_thread){ //if producer
 		debug("UP", "semaphore value is going up (producer thread)", 236);
-		s.val += 1;
-		if(s.val <= 0){
+		s->val += 1;
+		debug("UP", "semaphore value is INT (check <=0 to wake consumer)", s->val);
+		if(s->val <= 0){
 			//We know wake sig, so wake
-			debug("UP", "wakeup Producer", 244);
+			debug("UP", "wakeup consumer", 244);
 			my_wakeup(CONS_SIGNAL);
 		}
 	} else if (thread == cons_thread){ //if consumer
 		debug("UP", "semaphore value is going up (consumer thread)", 242);
-		s.val += 1;
-		if(s.val <= 0){
+		s->val += 1;
+		debug("UP", "semaphore value is INT (check <=0 to wake producer)", s->val);
+		if(s->val <= 0){
 			//we know wake sig, so wake
-			debug("UP", "wakeup Consumer", 252);
+			debug("UP", "wakeup producer", 252);
 			my_wakeup(PROD_SIGNAL);
 		}
 	}
