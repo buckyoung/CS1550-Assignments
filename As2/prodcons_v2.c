@@ -255,6 +255,7 @@ void enter_region(pthread_t process){
 			//do nothing, busy wait
 		}
 
+
 	}
 }
 
