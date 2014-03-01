@@ -59,6 +59,7 @@ int main (int argc, char* argv[]){
 
 }
 
+
 void *start_producer(void *args){
 
 	int seq_ints; //sequential integers
