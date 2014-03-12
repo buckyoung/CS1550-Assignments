@@ -11,5 +11,7 @@ v3) Synchronized with Unix pthread mutex and condition variables
 
 Assignment 3
 ============
+Written in Python
+-----------------
 Create a virtual memory-simulator and compare different page-fault eviction algorithms.
 Optimal / Clock / NotRecentlyUsed / Random
