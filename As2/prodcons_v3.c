@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+//#define TEST //DEFINE IF TESTING TIME (limited loops)
+#define LOOP_NUM 500000 //five-hundred thousand
+
 //Prototypes:
 void *start_producer(void *);
 
@@ -19,12 +22,16 @@ int main (int argc, char* argv[]){
 
 	pthread_t prod_thread;
 	int result, item;
+	int loop_num;
 
 	//Check Cmd-Line Args
 	if(argc != 2){
 		printf("Usage: ./prodcons_v# [buffer size]\n");
 		return -1;
 	}
+
+	//init loop num
+	loop_num = LOOP_NUM;
 
 	//Convert Cmd-Line Arg into an integer and malloc space for the buffer based on cmd-line size
 	buffer_size = atoi(argv[1]);
@@ -43,7 +50,7 @@ int main (int argc, char* argv[]){
 	producer_index = consumer_index = number_of_items = 0;
 
 	//Infinite CONSUMER loop
-	while(1){ 
+	while(loop_num){ 
 
 		pthread_mutex_lock(&mutex);
 
@@ -61,6 +68,10 @@ int main (int argc, char* argv[]){
 		if(number_of_items == buffer_size-1){ // if there is room in the buffer
 			pthread_cond_signal(&prod_cond); //wakeup producer
 		}
+
+		#ifdef TEST
+			loop_num--;
+		#endif
 
 		pthread_mutex_unlock(&mutex);
 

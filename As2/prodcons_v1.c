@@ -6,18 +6,22 @@
 #include <pthread.h>
 #include <signal.h>
 
+//#define TEST //DEFINE IF TESTING TIME (limited loops)
+#define LOOP_NUM 500000 //five-hundred thousand
+
 #define PROD_SIGNAL SIGUSR1 
 #define CONS_SIGNAL SIGUSR2
 
 //Prototypes:
 void *start_producer(void *);
 void my_sleep(int);
-void my_wakeup(int);
+void my_wakeup(pthread_t, int);
 
 //Shared variables:
 int *shared_buffer;
 int buffer_size, producer_index, consumer_index, number_of_items;
 pthread_t prod_thread, cons_thread;
+
 
 int main (int argc, char* argv[]){
 
@@ -26,11 +30,16 @@ int main (int argc, char* argv[]){
 
 	int result, item;
 
+	int loop_num;
+
 	//Check Cmd-Line Args
 	if(argc != 2){
 		printf("Usage: ./prodcons_v# [buffer size]\n");
 		return -1;
 	}
+
+	//Init loop num
+	loop_num = LOOP_NUM;
 
 	//Init consumer thread id
 	cons_thread = pthread_self();
@@ -61,7 +70,7 @@ int main (int argc, char* argv[]){
 	producer_index = consumer_index = number_of_items = 0;
 
 	//Infinite CONSUMER loop
-	while(1){ 
+	while(loop_num){ 
 
 		//Check if there is nothing to consume
 		if(number_of_items == 0){
@@ -73,9 +82,13 @@ int main (int argc, char* argv[]){
 		consumer_index = (consumer_index+1) % buffer_size;
 		number_of_items--;
 
+		#ifdef TEST
+			loop_num--;
+		#endif
+
 		//check if we should wake up the producer
 		if(number_of_items == buffer_size-1){
-			my_wakeup(PROD_SIGNAL);
+			my_wakeup(prod_thread, PROD_SIGNAL);
 		}
 
 		//Consume it (print it out)
@@ -116,7 +129,7 @@ void *start_producer(void *args){
 
 		//Check if we have an item for the consumer after it's been empty
 		if (number_of_items == 1){
-			my_wakeup(CONS_SIGNAL);
+			my_wakeup(cons_thread, CONS_SIGNAL);
 		}
 		
 	}
@@ -138,13 +151,8 @@ void my_sleep(int sig) { 	// PROD_SIGNAL or CONS_SIGNAL
 }
 
 //Custom wakeup
-void my_wakeup(int sig){	// PROD_SIGNAL or CONS_SIGNAL
-
-	if(sig == PROD_SIGNAL) { //If trying to wake up the producer
-		pthread_kill(prod_thread, PROD_SIGNAL); //send producer signal to the producer thread
-	} else if(sig == CONS_SIGNAL) { //If trying to wake up the consumer
-		pthread_kill(cons_thread, CONS_SIGNAL); //send the consumber signal to the consumer thread
-	}
+void my_wakeup(pthread_t thread, int sig){	// thread= prod_thread or cons_thread // sig = PROD_SIGNAL or CONS_SIGNAL
+		pthread_kill(thread, sig); //send producer signal to the producer thread
 }
 
 

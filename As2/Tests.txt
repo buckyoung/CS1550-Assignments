@@ -1,0 +1,62 @@
+The unsynchronized version never deadlocked for me, however it clearly had issues with race conditions. For instance, during my tests, I would print out the number-of-items currently in the buffer: very quickly this number became completely corrupt (often dipping far into the negative). Because of this, the producer and consumer would never sleep when they were supposed to and rediculous numbers were being produced and consumed in the buffer. For instance, the producer should sleep when the number of item in the buffer equals the buffer size. This will not always happen, however, because the number of items could be a wildly-negative number after a long run of consumption. Or visa versa: the consumer should stop consuming when the number of items in the buffer is equal to 0. However, race conditions may dictate that will never happen. Race conditions are also evident when the consumer would consume (for example) 450 then 451 and then, some time later, 450. This is a result of the number of items variable having a race condition and the consumer index looping back to the begining of the array (without ever sleeping).
+
+The two synchronized version also never deadlocked. Though the Petersons solution version (2) ran much slower -- most times ~150x to ~800x slower! Below is the results of three tests (though I did run more). Most times, v2 would start off quickly, producing large chunks of numbers then consuming them. However, it would occasionally start producing a single item, then consuming a single item -- this caused a massive slowdown in the overall runtime. The test where v2 took 19 seconds was a bit of an anomaly. 
+
+The Peterson's Solution with busy waiting is a waste of CPU cycles. The constant polling is a burden to the system, as it could be using that time to do useful work instead of running an empty-bodied while loop. I believe this is why v2 took so much longer than the others. 
+
+
+
+===========T1 | Buffer Size 100 | Items 500,000 ============
+v1
+	Time: 	real	0m9.505s
+			user	0m0.912s
+			sys		0m5.097s
+	Note:	This run completed but only consumed 403,021 items.
+
+v2
+	Time:	real	0m19.714s
+			user	0m17.024s
+			sys		0m1.921s
+	Note: 	The producer would produce 100, then the consumer would consume 100 -- went relatively fast.
+
+v3
+	Time:	real	0m8.709s
+			user	0m1.146s
+			sys		0m6.466s
+
+===========T2 | Buffer Size 100 | Items 500,000 ============
+v1
+	Time: 	real	0m6.948s
+			user	0m0.837s
+			sys		0m4.297s
+	Note:	This run completed but only consumed 490,199 items.
+
+v2
+	Time:	real	16m9.523s
+			user	16m4.483s
+			sys		0m1.774s
+	Note:	The producer would produce 1, then the consumer would consume 1 -- took much longer!
+
+v3
+	Time:	real	0m6.888s
+			user	0m1.186s
+			sys		0m6.017s
+
+===========T3 | Buffer Size 1000 | Items 500,000 ============
+v1
+	Time: 	real	0m6.718s
+			user	0m0.717s
+			sys		0m3.966s
+	Note:	This run completed but consumed 501,099 items.
+
+v2
+	Time:	real	70m39.669s
+			user	67m11.546s
+			sys		0m1.899s
+
+	Note:	The producer would produce 1, then the consumer would consume 1 -- took much longer!
+
+v3
+	Time:	real	0m5.126s
+			user	0m1.337s
+			sys		0m6.841s
