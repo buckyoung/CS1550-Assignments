@@ -26,6 +26,7 @@
 # Note: play around with NRU to determine the best refresh rate
 
 import sys
+from random import randint
 
 #Object Classes:
 class PTEntry:
@@ -71,29 +72,48 @@ class PTEntry:
 
 class Ram:
 	def __init__(self, numframes):
-		self.nf = int(numframes)
+		self.nf = numframes
 		self.array = [PTEntry() for i in range(self.nf)] # This is called a comprehension
 		self.fc = 0 #frame counter
 	def __repr__(self):
 		return "RAM(%d): %s FC(%d)" % (self.nf, self.array, self.fc)
 	def add(self, entry):
-		self.array[self.fc] = entry
-		entry.set_frame_num(self.fc)
+		self.array[entry.get_frame_number()] = entry
 		self.fc += 1
 	def update(self, index, entry):
 		self.array[index] = entry
-	def clear(self):
-		self.array = [PTEntry() for i in range(self.nf)]
-		self.fc = 0
+	#def clear(self):
+	#	self.array = [PTEntry() for i in range(self.nf)]
+	#	self.fc = 0
 	def is_full(self):
-		return (int(self.fc) == int(self.nf));
+		return (int(self.fc) >= int(self.nf));
 
-	def evict(self, entry): # 11PM addition
-		if(entry.get_dirty_bit == 1):
+	def evict(self): # 11PM addition
+		#Get Entry based on ALGO
+		#RAND
+		if ("opt" in algorithm): #OPTIMAL
+			print("Not Yet Implemented!")
+		elif ("clock" in algorithm): #CLOCK EVICT
+			print("Not Yet Implemented!")
+		elif ("nru" in algorithm): #NOT RECENTLY USED EVICT
+			print("Not Yet Implemented!")
+		else: #RANDOM EVICT
+			#Evict whatever the FC is at, modulo # of frames
+			evictthis = randint(0,self.nf-1)
+			#get whatever was there
+			old_entry = self.array[evictthis]
+			#empty it
+			#self.array[evictthis] = PTEntry() #well... not needed -- it will be overwritten!
+
+		#Determine if we need to write the old one to disk:
+		if(old_entry.get_dirty_bit() == 1):
 			print("RAM: Evict Dirty")
+			global total_writes_to_disk
+			total_writes_to_disk += 1
 		else:
 			print("RAM: Evict Clean")
-		entry.evicted()
+		old_entry.evicted() #invalidate and reset bits
+		return evictthis
 	
 	def get_frame_number(self):
 		return self.fc
@@ -139,7 +159,7 @@ def set_args():
 		global num_frames
 		i = sys.argv.index("-n")
 		i += 1
-		num_frames = sys.argv[i]
+		num_frames = int(sys.argv[i])
 	else: #if -n is not included in the cmdline args
 		exit()
 
@@ -148,6 +168,7 @@ def set_args():
 		i = sys.argv.index("-a")
 		i += 1
 		algorithm = sys.argv[i]
+		algorithm = algorithm.lower()
 	else: #if -a is not included in the cmdline args
 		exit() 
 
@@ -223,13 +244,19 @@ for line in f:
 			#TODO -- check if ram is full, then evict if needed
 			if(RAM.is_full()):
 				print("2) Page Fault: Evict because RAM is full")
+				total_page_faults += 1
+				existing_pt_entry.set_frame_num(RAM.evict()) #returns an empty frame 
 				#DEBUG EVICT ALL!
-				RAM.clear()
+				#RAM.clear()
 				#SET THE FRAME NUMBER FROM SOME RETURNING EVICTION FUNCTION!
 				#ENDDEBUG
 				#Add to RAM
 			else: #This type should go away when I implement my algorithms.
-				print("3) Page Fault: Compulsory -- must load page into RAM") 
+				#print("3) Page Fault: Compulsory -- must load page into RAM") 
+				print("3)  ---- THIS   SHOULD    NEVER     PRINT     EVER    @(@()(@$*(*$@(*&$%*(&#)%(*&#@jfldsjHF")
+				total_page_faults += 1
+				#NO evict -- set frame number
+				existing_pt_entry.set_frame_num(RAM.get_frame_number())
 				#Add to RAM
 
 			RAM.add(existing_pt_entry)
@@ -249,13 +276,18 @@ for line in f:
 		if (RAM.is_full()): #PAGE FAULT -- RUN EVICTION ALGO!
 			#DO THE eviction ALGORITHM
 			#DEBUG EVICT ALL!
-			RAM.clear()
+			#RAM.clear()
 			#GET FRAME NUMBER FROM RETURNING EVICTION ALGO
 			#ENDDEBUG
 			print("4) Page Fault: Evict because RAM is full")
+			total_page_faults += 1
+			new_page_table_entry.set_frame_num(RAM.evict()) #evict returns an open frame number!
 			#Add new
 		else: #PAGE FAULT - NO EVICTION! this will only happen for the first n frames when ram isnt full
 			print("5) Page Fault: Compulsory -- RAM is not full, must load")
+			total_page_faults += 1
+			#NO evict -- set frame number
+			new_page_table_entry.set_frame_num(RAM.get_frame_number())
 			#Add new
 
 		#Create Page Table entry and store in RAM!
