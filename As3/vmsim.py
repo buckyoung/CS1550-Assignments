@@ -45,6 +45,9 @@ class PTEntry:
 		self.r = 0
 		self.v = 0
 		self.fn = -1 # 11PM addition
+	def added(self):
+		self.r = 1
+		self.v = 1
 
 	def get_frame_number(self):
 		return self.fn
@@ -75,10 +78,12 @@ class Ram:
 		self.nf = numframes
 		self.array = [PTEntry() for i in range(self.nf)] # This is called a comprehension
 		self.fc = 0 #frame counter
+		self.clock_hand = 0 #init
 	def __repr__(self):
 		return "RAM(%d): %s FC(%d)" % (self.nf, self.array, self.fc)
 	def add(self, entry):
 		self.array[entry.get_frame_number()] = entry
+		entry.added()
 		self.fc += 1
 	def update(self, index, entry):
 		self.array[index] = entry
@@ -94,7 +99,21 @@ class Ram:
 		if ("opt" in algorithm): #OPTIMAL
 			print("Not Yet Implemented!")
 		elif ("clock" in algorithm): #CLOCK EVICT
-			print("Not Yet Implemented!")
+			replaced = False #init
+			while(not replaced):
+				#inspect R bit at hand location
+				old_entry = self.array[self.clock_hand]
+				if(old_entry.get_ref_bit() == 0): #If R == 0, place here
+					#evict entry
+					evictthis = old_entry.get_frame_number() #return this entry
+					replaced = True
+				else: #Else, clear R
+					old_entry.set_ref_bit(0)
+					self.clock_hand += 1
+					self.clock_hand = self.clock_hand % self.nf
+				#Increment clock hand and try again until replaced
+
+
 		elif ("nru" in algorithm): #NOT RECENTLY USED EVICT
 			print("Not Yet Implemented!")
 		else: #RANDOM EVICT
@@ -107,13 +126,14 @@ class Ram:
 
 		#Determine if we need to write the old one to disk:
 		if(old_entry.get_dirty_bit() == 1):
-			print("RAM: Evict Dirty")
+			#print("RAM: Evict Dirty")
 			global total_writes_to_disk
 			total_writes_to_disk += 1
-		else:
-			print("RAM: Evict Clean")
+		#else:
+			#print("RAM: Evict Clean")
+
 		old_entry.evicted() #invalidate and reset bits
-		return evictthis
+		return evictthis #return INT -- the frame number to be replaced!
 	
 	def get_frame_number(self):
 		return self.fc
@@ -234,7 +254,10 @@ for line in f:
 			existing_pt_entry.set_dirty_bit(1)
 
 		if(ram_entry.is_valid() and page_number == ram_entry.get_page_number()): #HIT! in page table and ram!
-			print("1) Hit!")
+			"""print("1) Hit!")"""
+			#set r bit
+			#existing_pt_entry.set_ref_bit(1)
+			ram_entry.set_ref_bit(1)
 			#Rewrite D-bit from RAM -- in case a write happened a while ago -- could be different than what is kept in the PT
 			#existing_pt_entry.set_dirty_bit(ram_entry.get_dirty_bit())
 			#Update the existing entry
@@ -243,7 +266,7 @@ for line in f:
 		else: #PAGE FAULT -- RUN EVICTION ALGO! hit in page table but not ram
 			#TODO -- check if ram is full, then evict if needed
 			if(RAM.is_full()):
-				print("2) Page Fault: Evict because RAM is full")
+				"""print("2) Page Fault: Evict because RAM is full")"""
 				total_page_faults += 1
 				existing_pt_entry.set_frame_num(RAM.evict()) #returns an empty frame 
 				#DEBUG EVICT ALL!
@@ -279,12 +302,12 @@ for line in f:
 			#RAM.clear()
 			#GET FRAME NUMBER FROM RETURNING EVICTION ALGO
 			#ENDDEBUG
-			print("4) Page Fault: Evict because RAM is full")
+			"""print("4) Page Fault: Evict because RAM is full")"""
 			total_page_faults += 1
 			new_page_table_entry.set_frame_num(RAM.evict()) #evict returns an open frame number!
 			#Add new
 		else: #PAGE FAULT - NO EVICTION! this will only happen for the first n frames when ram isnt full
-			print("5) Page Fault: Compulsory -- RAM is not full, must load")
+			"""print("5) Page Fault: Compulsory -- RAM is not full, must load")"""
 			total_page_faults += 1
 			#NO evict -- set frame number
 			new_page_table_entry.set_frame_num(RAM.get_frame_number())
