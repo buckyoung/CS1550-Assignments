@@ -33,11 +33,96 @@ page_faults = 0
 writes_disk = 0
 #
 
+#Object Classes:
+class PTEntry:
+	def __init__(self):
+		self.d = 0
+		self.r = 0
+		self.v = 0
+		self.pn = 0
+		self.fn = 0
+	def __repr__(self):
+		return "%d%d%d%s%d" % (self.v, self.d, self.r, self.pn, self.fn)
+	def is_valid(self):
+		return (self.v != 0)
+
+	def get_frame_number(self):
+		return self.fn
+	def get_page_number(self):
+		return self.pn
+	def get_dirty_bit(self):
+		return self.d
+	def get_ref_bit(self):
+		return self.r
+	def get_valid_bit(self):
+		return self.v
+	def get_key(self):
+		return self.pn
+
+	def set_dirty_bit(self, bit):
+		self.d = bit
+	def set_ref_bit(self, bit):
+		self.r = bit
+	def set_valid_bit(self, bit):
+		self.v = bit
+	def set_page_num(self, num):
+		self.pn = num
+	def set_frame_num(self, num):
+		self.fn = num
+
+class Ram:
+	def __init__(self, numframes):
+		self.nf = int(numframes)
+		self.array = [PTEntry() for i in range(self.nf)] # This is called a comprehension
+		self.fc = 0 #frame counter
+	def __repr__(self):
+		return "RAM(%d): %s FC(%d)" % (self.nf, self.array, self.fc)
+	def add(self, entry):
+		self.array[self.fc] = entry
+		entry.set_frame_num(self.fc)
+		self.fc += 1
+	def update(self, index, entry):
+		self.array[index] = entry
+	def clear(self):
+		self.array = [PTEntry() for i in range(self.nf)]
+		self.fc = 0
+	def is_full(self):
+		return (int(self.fc) == int(self.nf));
+	
+	def get_frame_number(self):
+		return self.fc
+	def get_entry(self, index):
+		return self.array[index]
+
+
+class PageTable:
+	def __init__(self):
+		self.pt = {}
+	def __repr__(self):
+		return "PT: %s" % (self.pt)
+	def add(self, entry):
+		entry.set_valid_bit(1)
+		self.pt[entry.get_key()] = entry
+	def update(self, entry):
+		self.pt[entry.get_key()] = entry
+
+	def get_entry(self, key):
+		return self.pt[key]
+
+
+	def dirty_bit(self, key):
+		self.pt[key] = "1%s" % (self.pt[key][1:])
+
+
+
 #Function Declarations:
+#EXIT
 def exit():
 	print("Usage: ./vmsim -n <numframes> -a <opt|clock|nru|rand> [-r <NRUrefresh>] <tracefile>")
 	sys.exit(-1)
+#END EXIT
 
+#SETARGS
 def set_args():
 	#check length
 	if not((len(sys.argv) == 6) or (len(sys.argv) == 8)):
@@ -72,6 +157,7 @@ def set_args():
 	#set filename
 	global filename
 	filename = sys.argv[-1]
+#END SETARGS
 
 
 # START MAIN:
@@ -81,14 +167,10 @@ set_args()
 
 # Create RAM with user-defined number of frames
 # Note: each frame in RAM is initialized to -1
-RAM = [-1 for i in range(int(num_frames))] # This is called a comprehension
-FRAME_COUNTER = 0 #init 
-
-# Create page table dictionary structure
-PAGE_TABLE = {} #init
+RAM = Ram(num_frames) #Create new ram object!
+PT = PageTable() #Create new PageTable Object!
 
 while(True):
-	print("PAGE_TABLE = %s" % PAGE_TABLE)
 	# TODO: Open file and reading
 	# DEBUG: Read line from keyboard
 	line = raw_input("DEBUG: Enter line from file: ")# DEBUG
@@ -98,69 +180,76 @@ while(True):
 
 	# Create the page number and operation
 	memory_address = result[0] #in hex
-	page_number = memory_address[:5] #ignore the offset!
+	page_number = memory_address[:5] #ignore the offset! First 5
 	operation = result[1] #R or W
 
-	# Check for page number in the page table
-	try:
-		pt_entry = PAGE_TABLE[page_number]
+	try: # Check for page number in the page table -- exists in page table
+		existing_pt_entry = PT.get_entry(page_number)
 		# Exists in page table!:
 
 		# Check for page in RAM
-		frame_number = pt_entry[7:]
-		ram_entry = RAM[int(frame_number)]
+		frame_number = existing_pt_entry.get_frame_number()
+		ram_entry = RAM.get_entry(frame_number)
 
-		if(page_number == ram_entry[2:7]): #HIT!
-			#TODO
+		if(operation.upper() == "W"):
+			existing_pt_entry.set_dirty_bit(1)
+
+		if(ram_entry.is_valid() and page_number == ram_entry.get_page_number()): #HIT! in page table and ram!
 			print("Hit!")
-		else: #PAGE FAULT -- RUN EVICTION ALGO!
-			#TODO -- run eviction algorithm
-			print("Page Fault: Evict")
+			#Rewrite D-bit from RAM -- in case a write happened a while ago -- could be different than what is kept in the PT
+			#existing_pt_entry.set_dirty_bit(ram_entry.get_dirty_bit())
+			#Update the existing entry
+			#PT.update(page_number, existing_pt_entry)
+			#RAM.update(frame_number, existing_pt_entry)
+		else: #PAGE FAULT -- RUN EVICTION ALGO! hit in page table but not ram
+			#TODO -- check if ram is full, then evict if needed
+			if(RAM.is_full()):
+				print("Page Fault: Evict")
+				#DEBUG EVICT ALL!
+				RAM.clear()
+				#SET THE FRAME NUMBER FROM SOME RETURNING EVICTION FUNCTION!
+				#ENDDEBUG
+				#Add to RAM
+			else:
+				print("RAM is not Full. Add")
+				#Add to RAM
 
-	except KeyError:
-		# Does not exist in page table yet:
+			RAM.add(existing_pt_entry)
 
-		# Create page table entry
-		D_bit = False #init
-		R_bit = False #init
+	except KeyError: # ---- Does not exist in page table yet:
+
+		#Start building the new entry
+		new_page_table_entry = PTEntry() #create new object!
+		new_page_table_entry.set_page_num(page_number)
+		#Set R and D based on operation:
 		if (operation.upper() == "R"):
-			R_bit = True
+			new_page_table_entry.set_ref_bit(1)
 		if (operation.upper() == "W"):
-			D_bit = True
-			R_bit = True
+			new_page_table_entry.set_ref_bit(1)
+			new_page_table_entry.set_dirty_bit(1)
 
-
-		if (int(FRAME_COUNTER) < int(num_frames)): #PAGE FAULT - NO EVICTION!
-			print("Page Fault: no eviction")
-			frame_number = FRAME_COUNTER
-			FRAME_COUNTER += 1
-		else: #PAGE FAULT -- RUN EVICTION ALGO!
+		if (RAM.is_full()): #PAGE FAULT -- RUN EVICTION ALGO!
 			#DO THE eviction ALGORITHM
+			#DEBUG EVICT ALL!
+			RAM.clear()
+			#GET FRAME NUMBER FROM RETURNING EVICTION ALGO
+			#ENDDEBUG
 			print("Page Fault: Evict (frames full)")
-			frame_number = -1
-		page_table_entry = "%i%i%s%d" % (D_bit, R_bit, page_number, frame_number)
-		#Insert the entry into the page table
-		PAGE_TABLE[page_number] = page_table_entry
-		#Insert the entry into RAM
-		RAM[frame_number] = page_table_entry
+			#Add new
+		else: #PAGE FAULT - NO EVICTION! this will only happen for the first n frames when ram isnt full
+			print("Page Fault: no eviction -- RAM is not full")
+			#Add new
+
+		#Create Page Table entry and store in RAM!
+		PT.add(new_page_table_entry)
+		RAM.add(new_page_table_entry)
+
+
+
+
+	print("%s" % PT)#DEBUG
+	print("%s" % RAM)#DEBUG
 
 
 
 # END MAIN
-
-#DEBUG
-print("num_frames = %s" % num_frames)
-print("algorithm = %s" % algorithm)
-try:
-	nru_refresh
-	print("nru_refresh = %s" % nru_refresh)
-except NameError:
-	pass
-print("filename = %s" % filename)
-print("RAM Len = %d" % len(RAM))
-print("Line = %s" % line)
-print("Memory Address = %s" % memory_address)
-print("Operation = %s" % operation)
-print("Page Number = %s" % page_number)
-print("PAGE_TABLE = %s" % PAGE_TABLE)
-print("Page table entry = %s" % page_table_entry)
