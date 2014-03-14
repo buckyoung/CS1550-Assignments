@@ -40,11 +40,16 @@ class PTEntry:
 		self.r = 0
 		self.v = 0
 		self.pn = 0
-		self.fn = 0
+		self.fn = -1 # 11PM addition
 	def __repr__(self):
-		return "%d%d%d%s%d" % (self.v, self.d, self.r, self.pn, self.fn)
+		return "(%d%d%d|%s|%d)" % (self.d, self.r, self.v, self.pn, self.fn)
 	def is_valid(self):
-		return (self.v != 0)
+		return (self.v != 0 and self.fn != -1) # 11PM addition
+	def evicted(self): # 11PM addition
+		self.d = 0
+		self.r = 0
+		self.v = 0
+		self.fn = -1 # 11PM addition
 
 	def get_frame_number(self):
 		return self.fn
@@ -88,6 +93,13 @@ class Ram:
 		self.fc = 0
 	def is_full(self):
 		return (int(self.fc) == int(self.nf));
+
+	def evict(self, entry): # 11PM addition
+		if(entry.get_dirty_bit == 1):
+			print("RAM: Evict Dirty")
+		else:
+			print("RAM: Evict Clean")
+		entry.evicted()
 	
 	def get_frame_number(self):
 		return self.fc
@@ -195,7 +207,7 @@ while(True):
 			existing_pt_entry.set_dirty_bit(1)
 
 		if(ram_entry.is_valid() and page_number == ram_entry.get_page_number()): #HIT! in page table and ram!
-			print("Hit!")
+			print("1) Hit!")
 			#Rewrite D-bit from RAM -- in case a write happened a while ago -- could be different than what is kept in the PT
 			#existing_pt_entry.set_dirty_bit(ram_entry.get_dirty_bit())
 			#Update the existing entry
@@ -204,14 +216,14 @@ while(True):
 		else: #PAGE FAULT -- RUN EVICTION ALGO! hit in page table but not ram
 			#TODO -- check if ram is full, then evict if needed
 			if(RAM.is_full()):
-				print("Page Fault: Evict")
+				print("2) Page Fault: Evict because RAM is full")
 				#DEBUG EVICT ALL!
 				RAM.clear()
 				#SET THE FRAME NUMBER FROM SOME RETURNING EVICTION FUNCTION!
 				#ENDDEBUG
 				#Add to RAM
-			else:
-				print("RAM is not Full. Add")
+			else: #This type should go away when I implement my algorithms.
+				print("3) Page Fault: Compulsory -- must load page into RAM") 
 				#Add to RAM
 
 			RAM.add(existing_pt_entry)
@@ -234,10 +246,10 @@ while(True):
 			RAM.clear()
 			#GET FRAME NUMBER FROM RETURNING EVICTION ALGO
 			#ENDDEBUG
-			print("Page Fault: Evict (frames full)")
+			print("4) Page Fault: Evict because RAM is full")
 			#Add new
 		else: #PAGE FAULT - NO EVICTION! this will only happen for the first n frames when ram isnt full
-			print("Page Fault: no eviction -- RAM is not full")
+			print("5) Page Fault: Compulsory -- RAM is not full, must load")
 			#Add new
 
 		#Create Page Table entry and store in RAM!
