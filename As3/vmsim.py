@@ -27,12 +27,6 @@
 
 import sys
 
-#Heuristics
-mem_accesses = 0
-page_faults = 0
-writes_disk = 0
-#
-
 #Object Classes:
 class PTEntry:
 	def __init__(self):
@@ -176,16 +170,28 @@ def set_args():
 
 # Set the global's from the cmd-line args
 set_args()
+global total_memory_access
+total_memory_access = 0 #init
+global total_page_faults
+total_page_faults = 0 #init
+global total_writes_to_disk
+total_writes_to_disk = 0 #init
 
 # Create RAM with user-defined number of frames
 # Note: each frame in RAM is initialized to -1
 RAM = Ram(num_frames) #Create new ram object!
 PT = PageTable() #Create new PageTable Object!
 
-while(True):
+#open file
+f = open(filename, "r")
+
+
+for line in f:
+	
+	total_memory_access += 1
 	# TODO: Open file and reading
 	# DEBUG: Read line from keyboard
-	line = raw_input("DEBUG: Enter line from file: ")# DEBUG
+	#line = raw_input("DEBUG: Enter line from file: ")# DEBUG
 
 	# Split line based on whitespace
 	result = line.split(" ")
@@ -193,7 +199,7 @@ while(True):
 	# Create the page number and operation
 	memory_address = result[0] #in hex
 	page_number = memory_address[:5] #ignore the offset! First 5
-	operation = result[1] #R or W
+	operation = result[1].rstrip() #R or W, strips the new line
 
 	try: # Check for page number in the page table -- exists in page table
 		existing_pt_entry = PT.get_entry(page_number)
@@ -259,8 +265,16 @@ while(True):
 
 
 
-	print("%s" % PT)#DEBUG
-	print("%s" % RAM)#DEBUG
+	#print("%s" % PT)#DEBUG
+	#print("%s" % RAM)#DEBUG
+
+#end of file parsing
+print("---------------------------------")
+print("Number of Frames: %s" % num_frames)
+print("Total Memory Accesses: %s" % total_memory_access)
+print("Total Page Faults: %s" % total_page_faults)
+print("Total Writes to Disk: %s" % total_writes_to_disk)
+print("---------------------------------")
 
 
 
